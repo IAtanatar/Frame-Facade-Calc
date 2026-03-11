@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Калькулятор рамочных фасадов</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --border: #e2e8f0;
+            --text: #0f172a;
+            --text-light: #64748b;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+        }
+        
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .container { max-width: 950px; margin: 0 auto; background: var(--surface); padding: 32px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        h1 { font-size: 24px; margin-top: 0; margin-bottom: 24px; border-bottom: 2px solid var(--border); padding-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+        .order-input-group { display: flex; align-items: center; gap: 12px; font-size: 16px; font-weight: normal; border: 1px solid var(--border); padding: 4px 12px; border-radius: 6px; background: #f8fafc; }
+        .order-input-group input { border: none; background: transparent; font-size: 16px; font-weight: bold; width: 100px; padding: 4px; outline: none; }
+        .order-input-group input:focus { color: var(--primary); }
+        
+        .settings-panel { display: flex; gap: 24px; margin-bottom: 32px; flex-wrap: wrap; background: #f1f5f9; padding: 16px; border-radius: 6px; }
+        .form-group { display: flex; flex-direction: column; gap: 8px; min-width: 200px; }
+        label { font-size: 14px; font-weight: 600; }
+        select, input[type="number"], input[type="text"] { padding: 10px 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; outline: none; }
+        select:focus, input[type="number"]:focus, input[type="text"]:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2); }
+        .info-text { font-size: 13px; color: var(--text-light); margin-top: 4px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background-color: var(--bg); font-weight: 600; font-size: 14px; color: var(--text-light); }
+        
+        .btn { padding: 10px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600; transition: 0.2s; }
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: var(--primary-hover); }
+        .btn-secondary { background-color: var(--surface); border: 1px solid var(--border); color: var(--text); }
+        .btn-secondary:hover { background-color: var(--bg); }
+        .btn-danger { background-color: transparent; color: var(--danger); padding: 6px 10px; font-weight: bold; }
+        .btn-danger:hover { background-color: #fef2f2; border-radius: 4px; }
+        .btn-clear { color: var(--text-light); border: 1px solid var(--border); background: transparent; }
+        .btn-clear:hover { background: #fee2e2; color: var(--danger); border-color: #fca5a5; }
+        
+        .actions-top { display: flex; gap: 12px; margin-bottom: 24px; }
+        .actions-bottom { display: flex; justify-content: flex-end; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border); }
+        
+        .results-panel { display: none; margin-top: 24px; padding: 20px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; align-items: flex-start; justify-content: space-between; gap: 16px; }
+        .results-panel.active { display: flex; flex-direction: row; align-items: center; }
+        .result-text { font-size: 15px; font-weight: 400; color: #166534; line-height: 1.6; }
+        .result-text strong { font-weight: 600; }
+        
+        input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+        input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.4; }
+
+        /* Визуализация кроя */
+        .cut-visuals { margin-top: 24px; display: none; }
+        .cut-visuals.active { display: block; }
+        .cut-group { margin-bottom: 24px; }
+        .cut-group h3 { font-size: 16px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        .bin-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 13px; }
+        .bin-label { min-width: 90px; font-weight: 600; color: var(--text-light); }
+        .bin-bar { flex-grow: 1; height: 32px; background: #e2e8f0; border-radius: 4px; display: flex; overflow: hidden; border: 1px solid #cbd5e1; position: relative; }
+        .bin-piece { height: 100%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; color: white; border-right: 1px solid rgba(255,255,255,0.3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .piece-h { background: var(--primary); }
+        .piece-w { background: #3b82f6; }
+        .piece-handle { background: var(--warning); color: #fff; }
+        .bin-waste { height: 100%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text-light); background: #f1f5f9; background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.03) 10px, rgba(0,0,0,0.03) 20px); }
+        .legend { display: flex; gap: 16px; font-size: 12px; margin-bottom: 16px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .legend-box { width: 16px; height: 16px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>
+        Калькулятор рамочных фасадов
+        <div class="order-input-group">
+            <label for="orderNumber">№ Заказа:</label>
+            <input type="text" id="orderNumber" placeholder="0001-26" oninput="saveState()">
+        </div>
+    </h1>
+
+    <div class="settings-panel">
+        <div class="form-group">
+            <label for="systemType">Система профилей</label>
+            <select id="systemType" onchange="updateInterface(); saveState();"></select>
+        </div>
+        <div class="form-group">
+            <label for="profileColor">Цвет</label>
+            <select id="profileColor" onchange="saveState()"></select>
+        </div>
+        <div class="form-group" style="justify-content: center;">
+            <div class="info-text" id="cutInfo"></div>
+        </div>
+    </div>
+
+    <div class="actions-top">
+        <button class="btn btn-secondary" onclick="addRow()">+ Добавить позицию</button>
+        <button class="btn btn-secondary" onclick="groupRows()">Сгруппировать одинаковые</button>
+        <button class="btn btn-clear" onclick="clearAll()">Очистить всё</button>
+        <div class="info-text" style="margin-left: auto; align-self: center;">Можно вставить данные из Excel (Ctrl+V)</div>
+    </div>
+
+    <table id="facadesTable">
+        <thead>
+            <tr>
+                <th>Высота, мм</th>
+                <th>Ширина, мм</th>
+                <th>Кол-во, шт</th>
+                <th>Профиль-ручка</th>
+                <th>Действие</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+
+    <div class="actions-bottom">
+        <button class="btn btn-primary" onclick="calculate()">Рассчитать спецификацию</button>
+    </div>
+
+    <div class="results-panel" id="resultsPanel">
+        <div class="result-text" id="resultText"></div>
+        <button class="btn btn-primary" style="background-color: #16a34a; display:none;" id="downloadBtn" onclick="downloadExcel()">Скачать XLSX файл</button>
+    </div>
+
+    <div class="cut-visuals" id="cutVisuals">
+        </div>
+</div>
+
+<script>
+    const profileDB = {
+        "edge": {
+            name: "Edge", headerExcel: "Профиль рамочный Аристо EDGE", hasHandle: true, cutLength: 2700,
+            colors: {
+                "black_mat": { label: "Чёрный матовый", isBlack: true, artMain: "DE0705.VP540.BKSPC.CJ", nameMain: "Профиль рамочный узкий 705 Чёрный матовый", artHandle: "DE0718.VP540.BKSPC.CJ", nameHandle: "Профиль рамочный узкий 718, с ручкой; Чёрный матовый" },
+                "silver_mat": { label: "Серебро матовое", isBlack: false, artMain: "DE0705.VP540.SLMAN.CJ", nameMain: "Профиль рамочный узкий 705 Серебро матовое", artHandle: "DE0718.VP540.SLMAN.CJ", nameHandle: "Профиль рамочный узкий 718, с ручкой; Серебро матовое" },
+                "gold_brush": { label: "Золото крацованное", isBlack: false, artMain: "DE0705.VP540.GLBAN.CJ", nameMain: "Профиль рамочный узкий 705 Золото крацованное", artHandle: "DE0718.VP540.GLBAN.CJ", nameHandle: "Профиль рамочный узкий 718, с ручкой; Золото крацованное" },
+                "black_brush": { label: "Чёрный крацованный", isBlack: true, artMain: "DE0705.VP540.BKBAN.CJ", nameMain: "Профиль рамочный узкий 705 Чёрный крацованный", artHandle: "DE0718.VP540.BKBAN.CJ", nameHandle: "Профиль рамочный узкий 718, с ручкой; Чёрный крацованный" }
+            },
+            accessories: [
+                { dynamic: true, calc: "facade", mult: 1, unit: "к-т", variants: { black: { article: "DE1011.VS000.BK0PC.CK", name: "Петли скрытого монтажа Черный" }, other: { article: "DE1011.VS000.NI0PC.CK", name: "Петли скрытого монтажа Никель" } } },
+                { dynamic: false, article: "DA0038.VP000.ZN0EP.CY", name: "Уголок соединительный", unit: "шт", calc: "facade", mult: 4 },
+                { dynamic: true, calc: "perimeter_pcs", pieceLength: 3, unit: "шт", variants: { black: { article: "-", name: "Уплотнитель универсальный чёрный (по 3м)" }, other: { article: "-", name: "Уплотнитель универсальный прозрачный (по 3м)" } } }
+            ]
+        },
+        "edge_max": {
+            name: "Edge MAX", headerExcel: "Профиль рамочный Аристо EDGE MAX", hasHandle: true, cutLength: 2700,
+            colors: {
+                "black_mat": { label: "Чёрный матовый", isBlack: true, artMain: "DE0708.VP540.BKSPC.CJ", nameMain: "Профиль рамочный узкий 708 Чёрный матовый", artHandle: "DE0709.VP540.BKSPC.CJ", nameHandle: "Профиль рамочный узкий 709, с ручкой; Чёрный матовый" },
+                "black_brush": { label: "Чёрный крацованный", isBlack: true, artMain: "DE0708.VP540.BKBAN.CJ", nameMain: "Профиль рамочный узкий 708 Чёрный крацованный", artHandle: "DE0709.VP540.BKBAN.CJ", nameHandle: "Профиль рамочный узкий 709, с ручкой; Чёрный крацованный" },
+                "gold_brush": { label: "Золото крацованное", isBlack: false, artMain: "DE0708.VP540.GLBAN.CJ", nameMain: "Профиль рамочный узкий 708 Золото крацованное", artHandle: "DE0709.VP540.GLBAN.CJ", nameHandle: "Профиль рамочный узкий 709, с ручкой; Золото крацованное" }
+            },
+            accessories: [
+                { dynamic: true, calc: "facade", mult: 1, unit: "к-т", variants: { black: { article: "DE1011.VS000.BK0PC.CK", name: "Петли Space Max скрытого монтажа Черный" }, other: { article: "DE1011.VS000.NI0PC.CK", name: "Петли Space Max скрытого монтажа Никель" } } },
+                { dynamic: false, article: "DA0038.VP000.ZN0EP.CY", name: "Уголок соединительный", unit: "шт", calc: "facade", mult: 4 },
+                { dynamic: true, calc: "perimeter_pcs", pieceLength: 3, unit: "шт", variants: { black: { article: "-", name: "Уплотнитель универсальный чёрный (по 3м)" }, other: { article: "-", name: "Уплотнитель универсальный прозрачный (по 3м)" } } }
+            ]
+        },
+        "aristo_298": {
+            name: "Аристо 298", headerExcel: "Профиль рамочный Аристо 298", hasHandle: false, cutLength: 2900,
+            colors: {
+                "black_mat": { label: "Чёрный матовый", isBlack: true, artMain: "DA0298.VP580.BKSPC.CJ", nameMain: "Профиль рамочный 298 (L=5800), чёрный матовый" },
+                "silver_mat": { label: "Серебро матовое", isBlack: false, artMain: "DA0298.VP580.SLMAN.CJ", nameMain: "Профиль рамочный 298 (L=5800), серебро матовое" },
+                "gold_mat": { label: "Золото матовое", isBlack: false, artMain: "DA0298.VP580.GLMAN.CJ", nameMain: "Профиль рамочный 298 (L=5800), золото матовое" }
+            },
+            accessories: [
+                { dynamic: false, article: "DA0038.VP000.ZN0EP.CY", name: "Уголок для широкого профиля", unit: "шт", calc: "facade", mult: 4 },
+                { dynamic: true, calc: "perimeter_m", mult: 1, unit: "м", variants: { black: { article: "-", name: "Уплотнитель универсальный чёрный" }, other: { article: "-", name: "Уплотнитель универсальный прозрачный" } } }
+            ]
+        },
+        "macro_pr4": {
+            name: "Макро ПР 4", headerExcel: "Профиль рамочный Макро ПР-4", hasHandle: false, cutLength: 2900,
+            colors: {
+                "black": { label: "Чёрный", isBlack: true, artMain: "-", nameMain: "Профиль № 4, чёрный 5850мм" },
+                "silver": { label: "Серебро", isBlack: false, artMain: "-", nameMain: "Профиль № 4, серебро 5850мм" },
+                "white_gloss": { label: "Белый глянец", isBlack: false, artMain: "-", nameMain: "Профиль № 4, белый глянец 5850мм" },
+                "gold": { label: "Золото", isBlack: false, artMain: "-", nameMain: "Профиль № 4, золото 5850мм" },
+                "chocolate": { label: "Шоколад", isBlack: false, artMain: "-", nameMain: "Профиль № 4, шоколад 5850мм" }
+            },
+            accessories: [
+                { dynamic: true, calc: "perimeter_m", mult: 1, unit: "м", variants: { black: { article: "Уплотнитель черный ПР-4", name: "Уплотнитель универсальный чёрный" }, other: { article: "Уплотнитель прозрачный ПР-4", name: "Уплотнитель универсальный прозрачный" } } },
+                { dynamic: false, article: "-", name: "Угол широкий Феннел уш3", unit: "шт", calc: "facade", mult: 4 },
+                { dynamic: true, calc: "facade", mult: 8, unit: "шт", variants: { black: { article: "-", name: "Винт DIN7991 5Х10 Черный" }, other: { article: "-", name: "Винт DIN7991 5Х10 Никель" } } }
+            ]
+        },
+        "macro_pr13": {
+            name: "Макро ПР 13", headerExcel: "Профиль рамочный Макро ПР-13", hasHandle: false, cutLength: 2900,
+            colors: {
+                "black_inox": { label: "Нержавейка черная", isBlack: true, artMain: "-", nameMain: "Профиль № 13 нержавейка черная" },
+                "silver": { label: "Серебро", isBlack: false, artMain: "-", nameMain: "Профиль № 13 серебро" }
+            },
+            accessories: [
+                { dynamic: false, article: "-", name: "Скотч для ПР13", unit: "м", calc: "perimeter_m", mult: 1 },
+                { dynamic: false, article: "-", name: "Угол широкий Феннел уш3", unit: "шт", calc: "facade", mult: 4 },
+                { dynamic: true, calc: "facade", mult: 8, unit: "шт", variants: { black: { article: "-", name: "Винт DIN7991 5Х10 Черный" }, other: { article: "-", name: "Винт DIN7991 5Х10 Никель" } } }
+            ]
+        }
+    };
+
+    let lastCalculationResult = null;
+
+    window.onload = function() { 
+        initSystemSelect(); 
+        loadState(); // Загружаем данные из localStorage
+    };
+
+    function initSystemSelect() {
+        const systemSelect = document.getElementById('systemType');
+        systemSelect.innerHTML = '';
+        for (const [key, data] of Object.entries(profileDB)) {
+            const option = document.createElement('option');
+            option.value = key; option.textContent = data.name;
+            systemSelect.appendChild(option);
+        }
+    }
+
+    function updateInterface(resetRows = true) {
+        const systemKey = document.getElementById('systemType').value;
+        const systemData = profileDB[systemKey];
+        
+        const colorSelect = document.getElementById('profileColor');
+        const currentColor = colorSelect.value;
+        colorSelect.innerHTML = '';
+        for (const [colorKey, colorData] of Object.entries(systemData.colors)) {
+            const option = document.createElement('option');
+            option.value = colorKey; option.textContent = colorData.label;
+            colorSelect.appendChild(option);
+        }
+        if (currentColor && systemData.colors[currentColor]) colorSelect.value = currentColor;
+
+        document.getElementById('cutInfo').innerHTML = `<strong>Длина хлыста:</strong> ${systemData.cutLength} мм<br><strong>Заказ кратно:</strong> 0.5 хлыста`;
+
+        if (resetRows) {
+            const checkboxes = document.querySelectorAll('.handle-checkbox');
+            checkboxes.forEach(cb => {
+                if (!systemData.hasHandle) { cb.checked = false; cb.disabled = true; } 
+                else { if (cb.disabled) cb.checked = true; cb.disabled = false; }
+            });
+        }
+        
+        document.getElementById('resultsPanel').classList.remove('active');
+        document.getElementById('cutVisuals').classList.remove('active');
+        lastCalculationResult = null;
+    }
+
+    // --- ЛОГИКА СОХРАНЕНИЯ (LOCAL STORAGE) ---
+    function saveState() {
+        const state = {
+            orderNumber: document.getElementById('orderNumber').value,
+            systemType: document.getElementById('systemType').value,
+            profileColor: document.getElementById('profileColor').value,
+            rows: []
+        };
+        document.querySelectorAll('#tableBody tr').forEach(tr => {
+            state.rows.push({
+                h: tr.querySelector('.height-input').value,
+                w: tr.querySelector('.width-input').value,
+                q: tr.querySelector('.qty-input').value,
+                handle: tr.querySelector('.handle-checkbox').checked
+            });
+        });
+        localStorage.setItem('facadeState', JSON.stringify(state));
+    }
+
+    function loadState() {
+        const stateStr = localStorage.getItem('facadeState');
+        if (stateStr) {
+            const state = JSON.parse(stateStr);
+            if (state.orderNumber) document.getElementById('orderNumber').value = state.orderNumber;
+            if (state.systemType) {
+                document.getElementById('systemType').value = state.systemType;
+                updateInterface(false);
+            }
+            if (state.profileColor) document.getElementById('profileColor').value = state.profileColor;
+            
+            document.getElementById('tableBody').innerHTML = '';
+            if (state.rows && state.rows.length > 0) {
+                state.rows.forEach(r => addRow(r.h, r.w, r.q, r.handle));
+            } else {
+                addRow();
+            }
+        } else {
+            updateInterface();
+            addRow();
+        }
+    }
+
+    function clearAll() {
+        if(!confirm("Очистить все введенные данные?")) return;
+        localStorage.removeItem('facadeState');
+        document.getElementById('orderNumber').value = '';
+        document.getElementById('tableBody').innerHTML = '';
+        addRow();
+        document.getElementById('resultsPanel').classList.remove('active');
+        document.getElementById('cutVisuals').classList.remove('active');
+        saveState();
+    }
+
+    function addRow(h = '', w = '', q = '1', handleChecked = null) {
+        const tbody = document.getElementById('tableBody');
+        const systemData = profileDB[document.getElementById('systemType').value];
+        
+        let isChecked = handleChecked !== null ? handleChecked : systemData.hasHandle;
+        const checkboxAttrs = !systemData.hasHandle ? 'disabled' : (isChecked ? 'checked' : '');
+        
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input type="number" min="100" placeholder="Напр. 716" class="height-input" value="${h}" oninput="saveState()"></td>
+            <td><input type="number" min="100" placeholder="Напр. 396" class="width-input" value="${w}" oninput="saveState()"></td>
+            <td><input type="number" min="1" value="${q}" class="qty-input" oninput="saveState()"></td>
+            <td><input type="checkbox" class="handle-checkbox" ${checkboxAttrs} onchange="saveState()"></td>
+            <td><button class="btn btn-danger" onclick="removeRow(this)">✕</button></td>
+        `;
+        tbody.appendChild(tr);
+        saveState();
+    }
+
+    function removeRow(button) {
+        const row = button.closest('tr');
+        if (document.getElementById('tableBody').children.length > 1) { 
+            row.remove(); 
+            saveState();
+        }
+    }
+
+    // --- ГРУППИРОВКА ОДИНАКОВЫХ ---
+    function groupRows() {
+        let rowsData = [];
+        document.querySelectorAll('#tableBody tr').forEach(tr => {
+            let h = tr.querySelector('.height-input').value;
+            let w = tr.querySelector('.width-input').value;
+            let q = parseInt(tr.querySelector('.qty-input').value) || 0;
+            let handle = tr.querySelector('.handle-checkbox').checked;
+            if (h && w && q > 0) {
+                let existing = rowsData.find(r => r.h === h && r.w === w && r.handle === handle);
+                if (existing) { existing.q += q; } 
+                else { rowsData.push({h, w, q, handle}); }
+            }
+        });
+        
+        if (rowsData.length > 0) {
+            document.getElementById('tableBody').innerHTML = '';
+            rowsData.forEach(r => addRow(r.h, r.w, r.q, r.handle));
+            saveState();
+        }
+    }
+
+    // --- ВСТАВКА ИЗ EXCEL (COPY-PASTE) ---
+    document.addEventListener('paste', function(e) {
+        let pasteData = (e.clipboardData || window.clipboardData).getData('text');
+        if (!pasteData || !pasteData.includes('\t')) return; // Реагируем только если данные похожи на таблицу с табуляцией
+        
+        let rows = pasteData.trim().split('\n');
+        let newRows = [];
+        for(let row of rows) {
+            let cols = row.split('\t');
+            if (cols.length >= 2) {
+                let h = parseFloat(cols[0].replace(',', '.').trim());
+                let w = parseFloat(cols[1].replace(',', '.').trim());
+                let q = cols[2] ? parseFloat(cols[2].replace(',', '.').trim()) : 1;
+                if (!isNaN(h) && !isNaN(w)) { newRows.push({h, w, q}); }
+            }
+        }
+        
+        if (newRows.length > 0) {
+            e.preventDefault();
+            const systemData = profileDB[document.getElementById('systemType').value];
+            // Если таблица была пустая (только первая пустая строка), очистим её
+            let firstRow = document.querySelector('#tableBody tr');
+            if (firstRow && !firstRow.querySelector('.height-input').value) {
+                document.getElementById('tableBody').innerHTML = '';
+            }
+            newRows.forEach(r => addRow(r.h, r.w, r.q, systemData.hasHandle));
+            groupRows();
+        }
+    });
+
+    // --- АЛГОРИТМ РАСКРОЯ С ДЕТАЛИЗАЦИЕЙ (BIN PACKING) ---
+    function packPieces(pieces, binCapacity) {
+        if (pieces.length === 0) return [];
+        // Сортируем от длинных к коротким
+        pieces.sort((a, b) => b.len - a.len); 
+        let bins = [];
+        for (let p of pieces) {
+            if (p.len > binCapacity) { alert(`Ошибка: деталь ${p.len - 5} мм не помещается в хлыст!`); return null; }
+            let placed = false;
+            for (let bin of bins) {
+                let currentSum = bin.reduce((sum, item) => sum + item.len, 0);
+                if (currentSum + p.len <= binCapacity) {
+                    bin.push(p); placed = true; break;
+                }
+            }
+            if (!placed) { bins.push([p]); }
+        }
+        return bins;
+    }
+
+    function calculate() {
+        const systemKey = document.getElementById('systemType').value;
+        const colorKey = document.getElementById('profileColor').value;
+        const systemData = profileDB[systemKey];
+        const colorData = systemData.colors[colorKey];
+        const isColorBlack = colorData.isBlack;
+        const binSize = systemData.cutLength; 
+        const kerf = 5; 
+
+        let mainPieces = [];
+        let handlePieces = [];
+        let totalFacades = 0;
+        let totalPerimeterMM = 0;
+
+        const rows = document.getElementById('tableBody').querySelectorAll('tr');
+        for (let row of rows) {
+            const hVal = row.querySelector('.height-input').value;
+            const wVal = row.querySelector('.width-input').value;
+            const qVal = row.querySelector('.qty-input').value;
+            const hasHandle = row.querySelector('.handle-checkbox').checked;
+
+            if (!hVal || !wVal || !qVal) continue;
+
+            const pureH = parseFloat(hVal);
+            const pureW = parseFloat(wVal);
+            const h = pureH + kerf;
+            const w = pureW + kerf;
+            const qty = parseInt(qVal);
+
+            totalFacades += qty;
+            totalPerimeterMM += (pureH * 2 + pureW * 2) * qty;
+
+            for (let i = 0; i < qty; i++) {
+                if (hasHandle && systemData.hasHandle) {
+                    handlePieces.push({len: h, label: `Ручка ${pureH}`, type: 'handle'}); 
+                    mainPieces.push({len: h, label: `В ${pureH}`, type: 'main-h'});   
+                    mainPieces.push({len: w, label: `Ш ${pureW}`, type: 'main-w'});   
+                    mainPieces.push({len: w, label: `Ш ${pureW}`, type: 'main-w'});   
+                } else {
+                    mainPieces.push({len: h, label: `В ${pureH}`, type: 'main-h'});
+                    mainPieces.push({len: h, label: `В ${pureH}`, type: 'main-h'});
+                    mainPieces.push({len: w, label: `Ш ${pureW}`, type: 'main-w'});
+                    mainPieces.push({len: w, label: `Ш ${pureW}`, type: 'main-w'});
+                }
+            }
+        }
+
+        if (mainPieces.length === 0 && handlePieces.length === 0) {
+            alert('Пожалуйста, заполните позиции фасадов.'); return;
+        }
+
+        const mainBins = packPieces(mainPieces, binSize);
+        if (!mainBins) return;
+        const handleBins = packPieces(handlePieces, binSize);
+        if (!handleBins) return;
+
+        const mainOrder = mainBins.length / 2;
+        const handleOrder = handleBins.length / 2;
+
+        // Фурнитура
+        let calculatedAccessories = [];
+        if (systemData.accessories) {
+            systemData.accessories.forEach(acc => {
+                let currentAcc = acc;
+                if (acc.dynamic) {
+                    const variant = isColorBlack ? acc.variants.black : acc.variants.other;
+                    currentAcc = { ...acc, article: variant.article, name: variant.name };
+                }
+                let accQty = 0;
+                if (currentAcc.calc === "facade") accQty = totalFacades * currentAcc.mult;
+                else if (currentAcc.calc === "perimeter_m") accQty = Math.ceil(((totalPerimeterMM / 1000) * 1.05) * 10) / 10; 
+                else if (currentAcc.calc === "perimeter_pcs") accQty = Math.ceil(((totalPerimeterMM / 1000) * 1.05) / currentAcc.pieceLength);
+                
+                calculatedAccessories.push({ article: currentAcc.article, name: currentAcc.name, unit: currentAcc.unit, qty: accQty });
+            });
+        }
+
+        lastCalculationResult = {
+            systemHeader: systemData.headerExcel,
+            main: { name: colorData.nameMain, article: colorData.artMain, qty: mainOrder },
+            handle: { name: colorData.nameHandle, article: colorData.artHandle, qty: handleOrder, hasHandle: (handleOrder > 0) },
+            accessories: calculatedAccessories
+        };
+
+        // --- ВЫВОД ИТОГОВ ---
+        const panel = document.getElementById('resultsPanel');
+        let resHTML = `<div><strong>Профили:</strong><br>Основной: <strong>${mainOrder} шт</strong><br>`;
+        if (systemData.hasHandle && handlePieces.length > 0) resHTML += `Профиль-ручка: <strong>${handleOrder} шт</strong><br>`;
+        resHTML += `</div>`;
+
+        if (calculatedAccessories.length > 0) {
+            resHTML += `<div><strong>Фурнитура:</strong><br>`;
+            calculatedAccessories.forEach(acc => { resHTML += `${acc.name}: <strong>${acc.qty} ${acc.unit}</strong><br>`; });
+            resHTML += `</div>`;
+        }
+        document.getElementById('resultText').innerHTML = resHTML;
+        panel.classList.add('active');
+        document.getElementById('downloadBtn').style.display = 'block';
+
+        // --- ОТРИСОВКА ВИЗУАЛИЗАЦИИ КРОЯ ---
+        renderVisuals(mainBins, handleBins, binSize);
+    }
+
+    function renderVisuals(mainBins, handleBins, binSize) {
+        const container = document.getElementById('cutVisuals');
+        let html = `<div class="legend">
+            <div class="legend-item"><div class="legend-box piece-h"></div> Высота</div>
+            <div class="legend-item"><div class="legend-box piece-w"></div> Ширина</div>
+            <div class="legend-item"><div class="legend-box piece-handle"></div> Ручка</div>
+            <div class="legend-item"><div class="legend-box bin-waste" style="border: 1px solid #ccc;"></div> Остаток</div>
+        </div>`;
+
+        if (mainBins.length > 0) {
+            html += `<div class="cut-group"><h3>Основной профиль (транспортный рез ${binSize} мм)</h3>`;
+            mainBins.forEach((bin, idx) => {
+                let used = 0;
+                let piecesHtml = '';
+                bin.forEach(p => {
+                    let percent = (p.len / binSize) * 100;
+                    used += p.len;
+                    let cssClass = p.type === 'main-h' ? 'piece-h' : 'piece-w';
+                    piecesHtml += `<div class="bin-piece ${cssClass}" style="width: ${percent}%;" title="${p.label} (с учетом реза ${p.len}мм)">${p.label}</div>`;
+                });
+                let waste = binSize - used;
+                let wastePercent = (waste / binSize) * 100;
+                piecesHtml += `<div class="bin-waste" style="width: ${wastePercent}%;" title="Остаток ${waste}мм">Ост. ${waste}</div>`;
+                
+                html += `<div class="bin-row">
+                    <div class="bin-label">Хлыст ${idx + 1}</div>
+                    <div class="bin-bar">${piecesHtml}</div>
+                </div>`;
+            });
+            html += `</div>`;
+        }
+
+        if (handleBins.length > 0) {
+            html += `<div class="cut-group"><h3>Профиль-ручка (транспортный рез ${binSize} мм)</h3>`;
+            handleBins.forEach((bin, idx) => {
+                let used = 0;
+                let piecesHtml = '';
+                bin.forEach(p => {
+                    let percent = (p.len / binSize) * 100;
+                    used += p.len;
+                    piecesHtml += `<div class="bin-piece piece-handle" style="width: ${percent}%;" title="${p.label} (с учетом реза ${p.len}мм)">${p.label}</div>`;
+                });
+                let waste = binSize - used;
+                let wastePercent = (waste / binSize) * 100;
+                piecesHtml += `<div class="bin-waste" style="width: ${wastePercent}%;" title="Остаток ${waste}мм">Ост. ${waste}</div>`;
+                
+                html += `<div class="bin-row">
+                    <div class="bin-label">Хлыст ${idx + 1}</div>
+                    <div class="bin-bar">${piecesHtml}</div>
+                </div>`;
+            });
+            html += `</div>`;
+        }
+
+        container.innerHTML = html;
+        container.classList.add('active');
+    }
+
+    // Экспорт в Excel остается без изменений
+    function downloadExcel() {
+        if (!lastCalculationResult) return;
+        let orderNumRaw = document.getElementById('orderNumber').value.trim();
+        const excelData = [ ["ЗАКАЗ", orderNumRaw, "", ""], ["Артикул", "Наименование материала", "Ед. изм.", "Кол-во"], [lastCalculationResult.systemHeader, "", "", ""] ];
+        excelData.push([ lastCalculationResult.main.article !== "-" ? lastCalculationResult.main.article : "", lastCalculationResult.main.name, "шт.", lastCalculationResult.main.qty ]);
+        if (lastCalculationResult.handle.hasHandle) excelData.push([ lastCalculationResult.handle.article !== "-" ? lastCalculationResult.handle.article : "", lastCalculationResult.handle.name, "шт.", lastCalculationResult.handle.qty ]);
+        if (lastCalculationResult.accessories.length > 0) {
+            excelData.push(["", "", "", ""]); excelData.push(["ФУРНИТУРА И СОПУТСТВУЮЩИЕ ТОВАРЫ", "", "", ""]);
+            lastCalculationResult.accessories.forEach(acc => { excelData.push([ acc.article !== "-" ? acc.article : "", acc.name, acc.unit, acc.qty ]); });
+        }
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        ws['!cols'] = [{ wch: 25 }, { wch: 60 }, { wch: 10 }, { wch: 10 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Заказ");
+        const colorLabel = document.getElementById('profileColor').options[document.getElementById('profileColor').selectedIndex].text.replace(/ /g, "_");
+        const systemName = document.getElementById('systemType').options[document.getElementById('systemType').selectedIndex].text.replace(/ /g, "_");
+        let fileName = orderNumRaw ? `Заказ_${orderNumRaw}_${systemName}_${colorLabel}.xlsx` : `Заказ_${systemName}_${colorLabel}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+    }
+</script>
+
+</body>
+</html>
