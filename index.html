@@ -26,7 +26,7 @@
         .order-input-group input { border: none; background: transparent; font-size: 16px; font-weight: bold; width: 100px; padding: 4px; outline: none; }
         .order-input-group input:focus { color: var(--primary); }
         
-        .settings-panel { display: flex; gap: 24px; margin-bottom: 32px; flex-wrap: wrap; background: #f1f5f9; padding: 16px; border-radius: 6px; }
+        .settings-panel { display: flex; gap: 24px; margin-bottom: 32px; flex-wrap: wrap; background: #f1f5f9; padding: 16px; border-radius: 6px; align-items: flex-end;}
         .form-group { display: flex; flex-direction: column; gap: 8px; min-width: 200px; }
         label { font-size: 14px; font-weight: 600; }
         select, input[type="number"], input[type="text"] { padding: 10px 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; outline: none; }
@@ -58,7 +58,6 @@
         input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
         input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.4; }
 
-        /* Визуализация кроя */
         .cut-visuals { margin-top: 24px; display: none; }
         .cut-visuals.active { display: block; }
         .cut-group { margin-bottom: 24px; }
@@ -90,14 +89,16 @@
     <div class="settings-panel">
         <div class="form-group">
             <label for="systemType">Система профилей</label>
-            <select id="systemType" onchange="updateInterface(); saveState();"></select>
+            <select id="systemType" onchange="updateInterface(true); saveState();"></select>
         </div>
         <div class="form-group">
             <label for="profileColor">Цвет</label>
             <select id="profileColor" onchange="saveState()"></select>
         </div>
-        <div class="form-group" style="justify-content: center;">
-            <div class="info-text" id="cutInfo"></div>
+        <div class="form-group" style="width: 180px;">
+            <label for="manualCutLength">Длина хлыста, мм</label>
+            <input type="number" id="manualCutLength" value="2700" step="10" oninput="saveState()">
+            <div class="info-text">Рез для раскроя</div>
         </div>
     </div>
 
@@ -130,8 +131,7 @@
         <button class="btn btn-primary" style="background-color: #16a34a; display:none;" id="downloadBtn" onclick="downloadExcel()">Скачать XLSX файл</button>
     </div>
 
-    <div class="cut-visuals" id="cutVisuals">
-        </div>
+    <div class="cut-visuals" id="cutVisuals"></div>
 </div>
 
 <script>
@@ -208,7 +208,7 @@
 
     window.onload = function() { 
         initSystemSelect(); 
-        loadState(); // Загружаем данные из localStorage
+        loadState(); 
     };
 
     function initSystemSelect() {
@@ -221,7 +221,7 @@
         }
     }
 
-    function updateInterface(resetRows = true) {
+    function updateInterface(resetSystemDependent = false) {
         const systemKey = document.getElementById('systemType').value;
         const systemData = profileDB[systemKey];
         
@@ -235,9 +235,8 @@
         }
         if (currentColor && systemData.colors[currentColor]) colorSelect.value = currentColor;
 
-        document.getElementById('cutInfo').innerHTML = `<strong>Длина хлыста:</strong> ${systemData.cutLength} мм<br><strong>Заказ кратно:</strong> 0.5 хлыста`;
-
-        if (resetRows) {
+        if (resetSystemDependent) {
+            document.getElementById('manualCutLength').value = systemData.cutLength;
             const checkboxes = document.querySelectorAll('.handle-checkbox');
             checkboxes.forEach(cb => {
                 if (!systemData.hasHandle) { cb.checked = false; cb.disabled = true; } 
@@ -250,12 +249,12 @@
         lastCalculationResult = null;
     }
 
-    // --- ЛОГИКА СОХРАНЕНИЯ (LOCAL STORAGE) ---
     function saveState() {
         const state = {
             orderNumber: document.getElementById('orderNumber').value,
             systemType: document.getElementById('systemType').value,
             profileColor: document.getElementById('profileColor').value,
+            manualCutLength: document.getElementById('manualCutLength').value,
             rows: []
         };
         document.querySelectorAll('#tableBody tr').forEach(tr => {
@@ -279,6 +278,11 @@
                 updateInterface(false);
             }
             if (state.profileColor) document.getElementById('profileColor').value = state.profileColor;
+            if (state.manualCutLength) {
+                document.getElementById('manualCutLength').value = state.manualCutLength;
+            } else {
+                document.getElementById('manualCutLength').value = profileDB[document.getElementById('systemType').value].cutLength;
+            }
             
             document.getElementById('tableBody').innerHTML = '';
             if (state.rows && state.rows.length > 0) {
@@ -287,7 +291,7 @@
                 addRow();
             }
         } else {
-            updateInterface();
+            updateInterface(true);
             addRow();
         }
     }
@@ -297,6 +301,7 @@
         localStorage.removeItem('facadeState');
         document.getElementById('orderNumber').value = '';
         document.getElementById('tableBody').innerHTML = '';
+        updateInterface(true);
         addRow();
         document.getElementById('resultsPanel').classList.remove('active');
         document.getElementById('cutVisuals').classList.remove('active');
@@ -330,7 +335,6 @@
         }
     }
 
-    // --- ГРУППИРОВКА ОДИНАКОВЫХ ---
     function groupRows() {
         let rowsData = [];
         document.querySelectorAll('#tableBody tr').forEach(tr => {
@@ -352,10 +356,9 @@
         }
     }
 
-    // --- ВСТАВКА ИЗ EXCEL (COPY-PASTE) ---
     document.addEventListener('paste', function(e) {
         let pasteData = (e.clipboardData || window.clipboardData).getData('text');
-        if (!pasteData || !pasteData.includes('\t')) return; // Реагируем только если данные похожи на таблицу с табуляцией
+        if (!pasteData || !pasteData.includes('\t')) return; 
         
         let rows = pasteData.trim().split('\n');
         let newRows = [];
@@ -372,7 +375,6 @@
         if (newRows.length > 0) {
             e.preventDefault();
             const systemData = profileDB[document.getElementById('systemType').value];
-            // Если таблица была пустая (только первая пустая строка), очистим её
             let firstRow = document.querySelector('#tableBody tr');
             if (firstRow && !firstRow.querySelector('.height-input').value) {
                 document.getElementById('tableBody').innerHTML = '';
@@ -382,14 +384,12 @@
         }
     });
 
-    // --- АЛГОРИТМ РАСКРОЯ С ДЕТАЛИЗАЦИЕЙ (BIN PACKING) ---
     function packPieces(pieces, binCapacity) {
         if (pieces.length === 0) return [];
-        // Сортируем от длинных к коротким
         pieces.sort((a, b) => b.len - a.len); 
         let bins = [];
         for (let p of pieces) {
-            if (p.len > binCapacity) { alert(`Ошибка: деталь ${p.len - 5} мм не помещается в хлыст!`); return null; }
+            if (p.len > binCapacity) { alert(`Ошибка: деталь ${p.len - 5} мм не помещается в хлыст ${binCapacity} мм!`); return null; }
             let placed = false;
             for (let bin of bins) {
                 let currentSum = bin.reduce((sum, item) => sum + item.len, 0);
@@ -408,7 +408,11 @@
         const systemData = profileDB[systemKey];
         const colorData = systemData.colors[colorKey];
         const isColorBlack = colorData.isBlack;
-        const binSize = systemData.cutLength; 
+        
+        // Получаем размер хлыста из поля ввода или берем дефолтный
+        let manualInput = parseFloat(document.getElementById('manualCutLength').value);
+        const binSize = (manualInput && manualInput > 100) ? manualInput : systemData.cutLength;
+        const standardFullProfile = systemData.cutLength * 2; // Целый заводской хлыст (5400 или 5800)
         const kerf = 5; 
 
         let mainPieces = [];
@@ -458,10 +462,13 @@
         const handleBins = packPieces(handlePieces, binSize);
         if (!handleBins) return;
 
-        const mainOrder = mainBins.length / 2;
-        const handleOrder = handleBins.length / 2;
+        // Расчет количества к заказу в стандартных целых хлыстах с округлением до 0.5
+        const mainOrderRaw = mainBins.length / (standardFullProfile / binSize);
+        const mainOrder = Math.ceil(mainOrderRaw * 2) / 2; 
 
-        // Фурнитура
+        const handleOrderRaw = handleBins.length / (standardFullProfile / binSize);
+        const handleOrder = Math.ceil(handleOrderRaw * 2) / 2;
+
         let calculatedAccessories = [];
         if (systemData.accessories) {
             systemData.accessories.forEach(acc => {
@@ -486,10 +493,9 @@
             accessories: calculatedAccessories
         };
 
-        // --- ВЫВОД ИТОГОВ ---
         const panel = document.getElementById('resultsPanel');
-        let resHTML = `<div><strong>Профили:</strong><br>Основной: <strong>${mainOrder} шт</strong><br>`;
-        if (systemData.hasHandle && handlePieces.length > 0) resHTML += `Профиль-ручка: <strong>${handleOrder} шт</strong><br>`;
+        let resHTML = `<div><strong>Профили к заказу:</strong><br>Основной: <strong>${mainOrder} шт</strong> (задействовано ${mainBins.length} отрезков по ${binSize}мм)<br>`;
+        if (systemData.hasHandle && handlePieces.length > 0) resHTML += `Профиль-ручка: <strong>${handleOrder} шт</strong> (задействовано ${handleBins.length} отрезков по ${binSize}мм)<br>`;
         resHTML += `</div>`;
 
         if (calculatedAccessories.length > 0) {
@@ -501,7 +507,6 @@
         panel.classList.add('active');
         document.getElementById('downloadBtn').style.display = 'block';
 
-        // --- ОТРИСОВКА ВИЗУАЛИЗАЦИИ КРОЯ ---
         renderVisuals(mainBins, handleBins, binSize);
     }
 
@@ -515,10 +520,9 @@
         </div>`;
 
         if (mainBins.length > 0) {
-            html += `<div class="cut-group"><h3>Основной профиль (транспортный рез ${binSize} мм)</h3>`;
+            html += `<div class="cut-group"><h3>Основной профиль (рез ${binSize} мм)</h3>`;
             mainBins.forEach((bin, idx) => {
-                let used = 0;
-                let piecesHtml = '';
+                let used = 0; let piecesHtml = '';
                 bin.forEach(p => {
                     let percent = (p.len / binSize) * 100;
                     used += p.len;
@@ -529,19 +533,15 @@
                 let wastePercent = (waste / binSize) * 100;
                 piecesHtml += `<div class="bin-waste" style="width: ${wastePercent}%;" title="Остаток ${waste}мм">Ост. ${waste}</div>`;
                 
-                html += `<div class="bin-row">
-                    <div class="bin-label">Хлыст ${idx + 1}</div>
-                    <div class="bin-bar">${piecesHtml}</div>
-                </div>`;
+                html += `<div class="bin-row"><div class="bin-label">Отр. ${idx + 1}</div><div class="bin-bar">${piecesHtml}</div></div>`;
             });
             html += `</div>`;
         }
 
         if (handleBins.length > 0) {
-            html += `<div class="cut-group"><h3>Профиль-ручка (транспортный рез ${binSize} мм)</h3>`;
+            html += `<div class="cut-group"><h3>Профиль-ручка (рез ${binSize} мм)</h3>`;
             handleBins.forEach((bin, idx) => {
-                let used = 0;
-                let piecesHtml = '';
+                let used = 0; let piecesHtml = '';
                 bin.forEach(p => {
                     let percent = (p.len / binSize) * 100;
                     used += p.len;
@@ -551,10 +551,7 @@
                 let wastePercent = (waste / binSize) * 100;
                 piecesHtml += `<div class="bin-waste" style="width: ${wastePercent}%;" title="Остаток ${waste}мм">Ост. ${waste}</div>`;
                 
-                html += `<div class="bin-row">
-                    <div class="bin-label">Хлыст ${idx + 1}</div>
-                    <div class="bin-bar">${piecesHtml}</div>
-                </div>`;
+                html += `<div class="bin-row"><div class="bin-label">Отр. ${idx + 1}</div><div class="bin-bar">${piecesHtml}</div></div>`;
             });
             html += `</div>`;
         }
@@ -563,7 +560,6 @@
         container.classList.add('active');
     }
 
-    // Экспорт в Excel остается без изменений
     function downloadExcel() {
         if (!lastCalculationResult) return;
         let orderNumRaw = document.getElementById('orderNumber').value.trim();
